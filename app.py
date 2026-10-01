@@ -350,6 +350,72 @@ def audio_test():
 })();
 </script>
 
+
+<script>
+(function(){
+  let lastRect = null;
+  let rafPending = false;
+
+  function getTypedNode(){
+    return document.getElementById('typed') ||
+           document.getElementById('typedText') ||
+           document.querySelector('[data-typed]') ||
+           document.querySelector('.typed');
+  }
+
+  function rememberTypedPosition(){
+    const el = getTypedNode();
+    if(!el) return;
+    lastRect = el.getBoundingClientRect();
+  }
+
+  function animateTypedCenter(){
+    if(rafPending) return;
+    rafPending = true;
+    requestAnimationFrame(function(){
+      rafPending = false;
+      const el = getTypedNode();
+      if(!el) return;
+      const next = el.getBoundingClientRect();
+      if(lastRect){
+        const dx = lastRect.left - next.left;
+        if(Math.abs(dx) > 0.2){
+          el.style.transition = 'none';
+          el.style.transform = 'translateX(' + dx + 'px)';
+          el.getBoundingClientRect();
+          requestAnimationFrame(function(){
+            el.style.transition = 'transform 120ms cubic-bezier(.2,.8,.2,1)';
+            el.style.transform = 'translateX(0)';
+          });
+        }
+      }
+      lastRect = next;
+    });
+  }
+
+  // Capture position before every key changes the visible word.
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Backspace' || /^[а-яА-ЯёЁ-]$/.test(e.key)){
+      rememberTypedPosition();
+      requestAnimationFrame(animateTypedCenter);
+    }
+  }, true);
+
+  // Also animate changes coming from realtime/server rendering.
+  const observer = new MutationObserver(function(){
+    animateTypedCenter();
+  });
+  function attach(){
+    const el=getTypedNode();
+    if(!el){ requestAnimationFrame(attach); return; }
+    lastRect=el.getBoundingClientRect();
+    observer.observe(el,{childList:true,characterData:true,subtree:true});
+    el.style.willChange='transform';
+  }
+  attach();
+})();
+</script>
+
 </body>'''
 
 @app.post('/api/play-audio')
