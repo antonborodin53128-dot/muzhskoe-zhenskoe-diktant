@@ -51,7 +51,23 @@ button,a{font-size:22px!important;min-height:72px!important;padding:14px 10px!im
 #countView{font-size:52px!important;min-width:90px!important}
 #names{display:block!important;width:100%!important}#names input{display:block!important;width:100%!important;box-sizing:border-box!important;font-size:24px!important;min-height:68px!important;margin:10px 0!important;padding:12px!important}
 #ctl .ans{font-size:23px!important}#ctl .typed{font-size:38px!important}#ctl .row{display:block!important}#ctl button{width:100%!important;font-size:22px!important;min-height:78px!important;margin:10px 0!important}
-}</style>'''
+}
+@media(max-width:700px){
+ body{padding:8px!important;font-size:16px!important}
+ .w{width:100%!important;max-width:none!important;margin:0!important}
+ .logo{font-size:38px!important;margin:10px 0 14px!important}
+ .p{padding:14px 12px!important;border-radius:16px!important;margin-bottom:10px!important}
+ .p h2{font-size:22px!important;margin:0 0 14px!important}
+ .lab{font-size:16px!important;margin:14px 0 8px!important}
+ button,a{font-size:17px!important;min-height:48px!important;padding:9px 10px!important;border-radius:11px!important}
+ .setbtn{font-size:16px!important;min-height:54px!important}
+ #countView{font-size:34px!important;min-width:58px!important}
+ #names input{font-size:17px!important;min-height:48px!important;margin:6px 0!important;padding:8px 10px!important}
+ #ctl .ans{font-size:18px!important;margin:8px 0!important}
+ #ctl .typed{font-size:28px!important;padding:10px!important}
+ #ctl button{font-size:17px!important;min-height:52px!important;margin:6px 0!important}
+}
+</style>'''
 
 CONTROL='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div class=w><div class=logo>ДИКТАНТ</div><div class=p><h2>НАСТРОЙКА КОНКУРСА</h2>
 <div class=lab style="margin-bottom:10px">НАБОР СЛОВ</div>
@@ -72,18 +88,53 @@ async function finishGame(){if(!confirm('Завершить конкурс и п
 async function playWord(){await fetch('/api/play-audio',{method:'POST'});poll()}
 async function send(k){await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
-async function poll(){ST=await(await fetch('/api/state?host=1')).json();if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}h+='<hr><div class=lab>ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`;ctl.innerHTML=h}setInterval(poll,300);poll();
+async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}setInterval(poll,300);poll();
 </script>'''
 
 SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 ВКЛЮЧИТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};async function send(k){await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
-let lastAudioSeq=0,audioUnlocked=false,wordPlayer=new Audio();
-function unlockAudio(){audioUnlocked=true;document.getElementById('audioUnlock').style.display='none';wordPlayer.muted=true;wordPlayer.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';wordPlayer.play().then(()=>{wordPlayer.pause();wordPlayer.muted=false}).catch(()=>{wordPlayer.muted=false})}
-function maybePlayAudio(){if(ST.audio_seq&&ST.audio_seq!==lastAudioSeq){lastAudioSeq=ST.audio_seq;if(audioUnlocked&&ST.audio){wordPlayer.pause();wordPlayer.currentTime=0;wordPlayer.src=ST.audio+'?v='+ST.audio_seq;wordPlayer.play().catch(()=>{audioUnlocked=false;document.getElementById('audioUnlock').style.display='flex'})}}}
+let lastAudioSeq=0,audioUnlocked=false,audioCtx=null,currentSource=null,audioCache={};
+async function unlockAudio(){
+ try{
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  await audioCtx.resume();
+  // Keep the audio context alive with an inaudible oscillator.
+  const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
+  gain.gain.value=0.000001;osc.connect(gain);gain.connect(audioCtx.destination);osc.start();
+  audioUnlocked=true;
+  document.getElementById('audioUnlock').style.display='none';
+ }catch(e){console.error(e)}
+}
+async function playRemoteWord(url){
+ if(!audioUnlocked||!audioCtx)return;
+ try{
+  if(audioCtx.state==='suspended')await audioCtx.resume();
+  if(!audioCache[url]){
+   const r=await fetch(url,{cache:'force-cache'});
+   if(!r.ok)throw new Error('audio '+r.status);
+   audioCache[url]=await audioCtx.decodeAudioData(await r.arrayBuffer());
+  }
+  if(currentSource){try{currentSource.stop()}catch(e){}}
+  currentSource=audioCtx.createBufferSource();
+  currentSource.buffer=audioCache[url];
+  currentSource.connect(audioCtx.destination);
+  currentSource.start(0);
+ }catch(e){
+  console.error('audio playback',e);
+  audioUnlocked=false;
+  document.getElementById('audioUnlock').style.display='flex';
+ }
+}
+function maybePlayAudio(){
+ if(ST.audio_seq&&ST.audio_seq!==lastAudioSeq){
+  lastAudioSeq=ST.audio_seq;
+  if(ST.audio)playRemoteWord(ST.audio);
+ }
+}
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
-async function poll(){ST=await(await fetch('/api/state')).json();maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}setInterval(poll,300);poll();
+async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}setInterval(poll,300);poll();
 </script>'''
 
 def snap(host=False):
