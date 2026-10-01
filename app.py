@@ -1,8 +1,10 @@
 import os
 import base64
 from flask import Flask, request, jsonify, render_template_string, Response
+from flask_socketio import SocketIO, emit
 import random
 app=Flask(__name__)
+socketio=SocketIO(app,cors_allowed_origins='*',async_mode='threading')
 SETS={
 '1':['интеллигентность','ассимиляция','параллелепипед','аббревиатура','искусство','привередливый','комбинезон','периферия','бюллетень','целлофан'],
 '2':['иррациональность','идентифицировать','коррозия','прецедент','палисадник','поскользнуться','привилегия','пессимистичный','прерогатива','брошюра']}
@@ -97,7 +99,7 @@ button,a{font-size:22px!important;min-height:72px!important;padding:14px 10px!im
 }
 </style>'''
 
-CONTROL='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div class=w><div class=logo>ДИКТАНТ</div><div class=p><h2>НАСТРОЙКА КОНКУРСА</h2>
+CONTROL='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div class=w><div class=logo>ДИКТАНТ</div><div class=p><h2>НАСТРОЙКА КОНКУРСА</h2>
 <div class=lab style="margin-bottom:10px">НАБОР СЛОВ</div>
 <div class=row><button id=set1 class="go setbtn" onclick="chooseSet(1)">НАБОР СЛОВ 1</button><button id=set2 class=setbtn onclick="chooseSet(2)">НАБОР СЛОВ 2</button></div>
 <div class=lab style="margin-top:28px;margin-bottom:10px">КОЛИЧЕСТВО УЧАСТНИКОВ</div>
@@ -111,15 +113,23 @@ async function start(){let a=[];for(let i=1;i<=participantCount;i++)a.push(`УЧ
 async function resetGame(){await fetch('/api/reset',{method:'POST'});location.reload()} async function next(){await fetch('/api/next',{method:'POST'});poll()}
 async function table(show){await fetch('/api/table',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({show:show})});poll()}
 async function finishGame(){if(!confirm('Завершить конкурс и показать итоговые результаты?'))return;await fetch('/api/finish',{method:'POST'});poll()}
-async function playWord(){await fetch('/api/play-audio',{method:'POST'});await poll()}
-let keyQueue=Promise.resolve();
-function send(k){keyQueue=keyQueue.then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})).then(()=>poll()).catch(console.error);return keyQueue}
+function playWord(){if(rt&&rt.connected){rt.emit('play_audio');return}fetch('/api/play-audio',{method:'POST'}).catch(console.error)}
+const rt=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
+if(rt)rt.on('state_host',st=>{ST=st;renderHost()});
+function optimistic(k){
+ if(ST.phase!=='typing')return;
+ if(k==='BACKSPACE')ST.typed=(ST.typed||'').slice(0,-1);
+ else if(k!=='ENTER'&&k.length===1)ST.typed=(ST.typed||'')+k.toLowerCase();
+ renderHost();
+}
+function send(k){optimistic(k);if(rt&&rt.connected){rt.emit('key',{key:k});return}fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error)}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
-async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}
+function renderHost(){if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}
+async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();renderHost()}
 let hostPollTimer=null;async function pollLoop(){try{await poll()}catch(e){console.error(e)}hostPollTimer=setTimeout(pollLoop,100)}pollLoop();
 </script>'''
 
-SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
+SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};let keyQueue=Promise.resolve();function send(k){keyQueue=keyQueue.then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})).then(()=>poll()).catch(console.error);return keyQueue}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
@@ -170,7 +180,9 @@ function maybePlayAudio(){
  }
 }
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
-async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
+function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
+const rtGuest=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;if(rtGuest)rtGuest.on('state_guest',st=>{ST=st;renderGuest()});
+async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();renderGuest()}
 async function pollLoop(){try{await poll()}catch(e){console.error(e)}setTimeout(pollLoop,100)}pollLoop();
 </script>'''
 
@@ -199,22 +211,48 @@ def state():return jsonify(snap(request.args.get('host')=='1'))
 @app.post('/api/start')
 def start():
  x=request.json or {}; names=x.get('names',[]); words=SETS[str(x.get('set','1'))][:];random.shuffle(words)
- S.clear();S.update(phase='typing',names=names,words=words,wi=0,pi=0,typed='',answers={},scores={n:0 for n in names},show_table=False,audio_seq=0);return jsonify(ok=True)
-@app.post('/api/key')
-def key():
- if S['phase']!='typing':return jsonify(ok=False),409
- k=str((request.json or {}).get('key',''))
- if k=='BACKSPACE':S['typed']=S['typed'][:-1]
+ S.clear();S.update(phase='typing',names=names,words=words,wi=0,pi=0,typed='',answers={},scores={n:0 for n in names},show_table=False,audio_seq=0);push_state();return jsonify(ok=True)
+def apply_key(k):
+ if S['phase']!='typing': return False
+ if k=='BACKSPACE': S['typed']=S['typed'][:-1]
  elif k=='ENTER':
-  if not S['typed']:return jsonify(ok=False),400
+  if not S['typed']: return False
   n=S['names'][S['pi']];e,o=calc(S['words'][S['wi']],S['typed']);S['answers'].setdefault(str(S['wi']),{})[n]={'errors':e,'ops':o};S['scores'][n]+=e;S['typed']='';S['pi']+=1
   if S['pi']>=len(S['names']):S['pi']=0;S['phase']='reveal'
  elif len(k)==1 and (k.isalpha() or k=='-') and len(S['typed'])<40:S['typed']+=k.lower()
+ else: return False
+ return True
+
+def push_state():
+ socketio.emit('state_guest',snap(False))
+ socketio.emit('state_host',snap(True))
+
+@socketio.on('connect')
+def ws_connect():
+ emit('state_guest',snap(False))
+ emit('state_host',snap(True))
+
+@socketio.on('key')
+def ws_key(data):
+ k=str((data or {}).get('key',''))
+ if apply_key(k): push_state()
+
+@socketio.on('play_audio')
+def ws_play_audio():
+ if S['phase'] in ('typing','reveal'):
+  S['audio_seq']=S.get('audio_seq',0)+1
+  push_state()
+
+@app.post('/api/key')
+def key():
+ k=str((request.json or {}).get('key',''))
+ if not apply_key(k):return jsonify(ok=False),409
+ push_state()
  return jsonify(ok=True)
 @app.post('/api/next')
 def nxt():
  if S['phase']!='reveal':return jsonify(ok=False),409
- S['wi']+=1;S['phase']='finished' if S['wi']>=10 else 'typing';return jsonify(ok=True)
+ S['wi']+=1;S['phase']='finished' if S['wi']>=10 else 'typing';push_state();return jsonify(ok=True)
 @app.get('/audio-status')
 def audio_status():
  files=sorted(EMBEDDED_AUDIO_B64.keys())
@@ -228,42 +266,28 @@ def audio_status():
 
 @app.get('/audio-test')
 def audio_test():
- return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
  <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
- <audio controls preload="auto" src="/audio/01.mp3"></audio>
-<script>
-(function(){
-  if(typeof io === 'undefined') return;
-  const s = io({transports:['websocket','polling'], upgrade:true, reconnection:true});
-  window.rtSocket = s;
-  s.on('state', function(st){
-    window.__rtState = st;
-    if(typeof render === 'function') render(st);
-    else if(typeof applyState === 'function') applyState(st);
-    else if(typeof updateUI === 'function') updateUI(st);
-  });
-})();
-</script>
-
-</body>'''
+ <audio controls preload="auto" src="/audio/01.mp3"></audio></body>'''
 
 @app.post('/api/play-audio')
 def play_audio():
  if S['phase'] not in ('typing','reveal'):return jsonify(ok=False),409
  S['audio_seq']=S.get('audio_seq',0)+1
+ push_state()
  return jsonify(ok=True)
 
 @app.post('/api/table')
 def table():
  if S['phase'] in ('setup','finished'):return jsonify(ok=False),409
- S['show_table']=bool((request.json or {}).get('show',True));return jsonify(ok=True)
+ S['show_table']=bool((request.json or {}).get('show',True));push_state();return jsonify(ok=True)
 
 @app.post('/api/finish')
 def finish():
  if S['phase']=='setup':return jsonify(ok=False),409
- S['typed']='';S['show_table']=False;S['phase']='finished';return jsonify(ok=True)
+ S['typed']='';S['show_table']=False;S['phase']='finished';push_state();return jsonify(ok=True)
 
 @app.post('/api/reset')
 def reset():S.clear();S.update(phase='setup',names=[],words=[],wi=0,pi=0,typed='',answers={},scores={},show_table=False,audio_seq=0);return jsonify(ok=True)
-if __name__=='__main__':app.run(host='0.0.0.0',port=5000,debug=True)
+if __name__=='__main__':socketio.run(app,host='0.0.0.0',port=5000,debug=True,allow_unsafe_werkzeug=True)
