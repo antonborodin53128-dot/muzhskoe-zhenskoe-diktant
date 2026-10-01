@@ -144,14 +144,39 @@ let hostPollTimer=null;async function pollLoop(){if(!rt||!rt.connected){try{awai
 SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};
 const rtGuest=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
-function paintTyped(){const n=document.getElementById('guestTyped');if(n)n.textContent=ST.typed||'_'}
+let LOCAL_TYPED='';
+let LOCAL_WI=-1, LOCAL_PI=-1;
+function ensureLocalTurn(){
+ if(LOCAL_WI!==ST.wi||LOCAL_PI!==ST.pi){
+   LOCAL_WI=ST.wi;LOCAL_PI=ST.pi;LOCAL_TYPED=ST.typed||'';
+ }
+}
+function paintTyped(){
+ const n=document.getElementById('guestTyped');
+ if(n)n.textContent=LOCAL_TYPED||'_';
+}
 function send(k){
  if(ST.phase!=='typing')return;
- if(k==='BACKSPACE')ST.typed=(ST.typed||'').slice(0,-1);
- else if(k!=='ENTER'&&k.length===1)ST.typed=(ST.typed||'')+k.toLowerCase();
- paintTyped();
- if(rtGuest&&rtGuest.connected){rtGuest.emit('key',{key:k});return}
- fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error);
+ ensureLocalTurn();
+
+ if(k==='BACKSPACE'){
+   LOCAL_TYPED=LOCAL_TYPED.slice(0,-1);
+   paintTyped();
+ }else if(k!=='ENTER'&&k.length===1){
+   LOCAL_TYPED+=k.toLowerCase();
+   paintTyped();
+ }
+
+ if(rtGuest&&rtGuest.connected){
+   rtGuest.emit('key',{key:k});
+ }else{
+   fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error);
+ }
+
+ if(k==='ENTER'){
+   LOCAL_TYPED='';
+   LOCAL_WI=-1;LOCAL_PI=-1;
+ }
 }
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
@@ -202,15 +227,20 @@ function maybePlayAudio(){
  }
 }
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
-function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
+function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing'){ensureLocalTurn();h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h;if(ST.phase==='typing')paintTyped()}
 if(rtGuest)rtGuest.on('state_guest',st=>{
-  if(window.__mergeWithoutRollback) st=window.__mergeWithoutRollback(ST,st);
-  const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
+  const oldWi=ST.wi, oldPi=ST.pi, oldPhase=ST.phase;
+  const sameTurn=(oldPhase==='typing'&&st.phase==='typing'&&oldWi===st.wi&&oldPi===st.pi);
   ST=st;
-  if(sameTyping){
-    maybePlayAudio();
-    paintTyped();
-  }else renderGuest();
+  maybePlayAudio();
+  if(sameTurn){
+    /* IMPORTANT: do not touch LOCAL_TYPED or repaint it from server state */
+  }else{
+    LOCAL_WI=-1;LOCAL_PI=-1;
+    if(ST.phase==='typing'){ensureLocalTurn();}
+    renderGuest();
+    if(ST.phase==='typing')paintTyped();
+  }
 });
 async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();renderGuest()}
 async function pollLoop(){if(!rtGuest||!rtGuest.connected){try{await poll()}catch(e){console.error(e)}}setTimeout(pollLoop,2000)}pollLoop();
