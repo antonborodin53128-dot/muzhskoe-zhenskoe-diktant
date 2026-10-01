@@ -134,49 +134,39 @@ function optimistic(k){
  const n=ctl.querySelector('.typed');
  if(n)n.textContent=ST.typed||'_';
 }
-function send(k){optimistic(k);if(rt&&rt.connected){rt.emit('key',{key:k});return}fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error)}
+function send(k){
+ optimistic(k);
+ if(k==='ENTER'){
+   if(window.__fullTextFlush)window.__fullTextFlush(ST.typed||'');
+   if(rt&&rt.connected){setTimeout(()=>rt.emit('key',{key:k}),8);return}
+   setTimeout(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error),12);
+   return;
+ }
+ if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
+}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function renderHost(){if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}
 async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();renderHost()}
 let hostPollTimer=null;async function pollLoop(){if(!rt||!rt.connected){try{await poll()}catch(e){console.error(e)}}hostPollTimer=setTimeout(pollLoop,(rt&&rt.connected)?2000:150)}pollLoop();
 </script>'''
 
-SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio(event)" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
+SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};
 const rtGuest=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
-let LOCAL_TYPED='';
-let LOCAL_WI=-1, LOCAL_PI=-1;
-function ensureLocalTurn(){
- if(LOCAL_WI!==ST.wi||LOCAL_PI!==ST.pi){
-   LOCAL_WI=ST.wi;LOCAL_PI=ST.pi;LOCAL_TYPED=ST.typed||'';
- }
-}
-function paintTyped(){
- const n=document.getElementById('guestTyped');
- if(n)n.textContent=LOCAL_TYPED||'_';
-}
+function paintTyped(){const n=document.getElementById('guestTyped');if(n)n.textContent=ST.typed||'_'}
 function send(k){
  if(ST.phase!=='typing')return;
- ensureLocalTurn();
-
- if(k==='BACKSPACE'){
-   LOCAL_TYPED=LOCAL_TYPED.slice(0,-1);
-   paintTyped();
- }else if(k!=='ENTER'&&k.length===1){
-   LOCAL_TYPED+=k.toLowerCase();
-   paintTyped();
- }
-
- if(rtGuest&&rtGuest.connected){
-   rtGuest.emit('key',{key:k});
- }else{
-   fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error);
- }
+ if(k==='BACKSPACE')ST.typed=(ST.typed||'').slice(0,-1);
+ else if(k!=='ENTER'&&k.length===1)ST.typed=(ST.typed||'')+k.toLowerCase();
+ paintTyped();
 
  if(k==='ENTER'){
-   LOCAL_TYPED='';
-   LOCAL_WI=-1;LOCAL_PI=-1;
+   if(window.__fullTextFlush)window.__fullTextFlush(ST.typed||'');
+   if(rtGuest&&rtGuest.connected){setTimeout(()=>rtGuest.emit('key',{key:k}),8);return}
+   setTimeout(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error),12);
+   return;
  }
+ if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
 }
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
@@ -187,45 +177,24 @@ function audioKey(url){
  try{return decodeURIComponent(url).split('/').pop()}catch(e){return url.split('/').pop()}
 }
 
-function prepareAudioPlayers(){
- if(Object.keys(audioPlayers).length)return;
+async function unlockAudio(){
+ audioUnlocked=true;
+ document.getElementById('audioUnlock').style.display='none';
+ // Create and prime every contest audio element from this real user gesture.
  const urls=['/audio/01.mp3','/audio/02.mp3','/audio/03.mp3','/audio/04.mp3','/audio/05.mp3','/audio/06.mp3','/audio/07.mp3','/audio/08.mp3','/audio/09.mp3','/audio/10.mp3','/audio/11.mp3','/audio/12.mp3','/audio/13.mp3','/audio/14.mp3','/audio/15.mp3','/audio/16.mp3','/audio/17.mp3','/audio/18.mp3','/audio/19.mp3','/audio/20.mp3'];
  for(const url of urls){
-   const a=new Audio(url);
-   a.preload='auto';
-   audioPlayers[audioKey(url)]=a;
-   try{a.load()}catch(_){}
+  const a=new Audio(url);
+  a.preload='auto';
+  audioPlayers[audioKey(url)]=a;
+  a.load();
  }
-}
-prepareAudioPlayers();
-
-function unlockAudio(e){
- if(e){e.preventDefault();e.stopPropagation();}
- audioUnlocked=true;
-
- // UI removal is synchronous and unconditional.
- const overlay=document.getElementById('audioUnlock');
- if(overlay){
-   overlay.style.display='none';
-   overlay.remove();
- }
-
- // This is intentionally best-effort. Playback failure cannot restore the overlay.
- const first=audioPlayers['01.mp3'];
- if(first){
-   try{
-     first.volume=0.001;
-     const p=first.play();
-     if(p&&p.then){
-       p.then(()=>{
-         try{first.pause();first.currentTime=0;first.volume=1}catch(_){}
-       }).catch(err=>console.error('audio activation:',err));
-     }else{
-       try{first.pause();first.currentTime=0;first.volume=1}catch(_){}
-     }
-   }catch(err){console.error('audio activation:',err)}
- }
- return false;
+ // Prime the first real MP3 under the user's click, then immediately stop it.
+ try{
+  const a=audioPlayers['01.mp3'];
+  a.volume=0.001;
+  await a.play();
+  a.pause();a.currentTime=0;a.volume=1;
+ }catch(e){console.error('activation prime:',e)}
 }
 
 function playRemoteWord(url){
@@ -248,20 +217,15 @@ function maybePlayAudio(){
  }
 }
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
-function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing'){ensureLocalTurn();h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h;if(ST.phase==='typing')paintTyped()}
+function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
 if(rtGuest)rtGuest.on('state_guest',st=>{
-  const oldWi=ST.wi, oldPi=ST.pi, oldPhase=ST.phase;
-  const sameTurn=(oldPhase==='typing'&&st.phase==='typing'&&oldWi===st.wi&&oldPi===st.pi);
+  if(window.__mergeWithoutRollback) st=window.__mergeWithoutRollback(ST,st);
+  const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
   ST=st;
-  maybePlayAudio();
-  if(sameTurn){
-    /* IMPORTANT: do not touch LOCAL_TYPED or repaint it from server state */
-  }else{
-    LOCAL_WI=-1;LOCAL_PI=-1;
-    if(ST.phase==='typing'){ensureLocalTurn();}
-    renderGuest();
-    if(ST.phase==='typing')paintTyped();
-  }
+  if(sameTyping){
+    maybePlayAudio();
+    paintTyped();
+  }else renderGuest();
 });
 async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();renderGuest()}
 async function pollLoop(){if(!rtGuest||!rtGuest.connected){try{await poll()}catch(e){console.error(e)}}setTimeout(pollLoop,2000)}pollLoop();
@@ -326,6 +290,13 @@ def socket_set_typed(data):
     value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
     state['typed'] = value
     broadcast_state()
+
+@socketio.on('typed_sync')
+def socket_typed_sync(data):
+    value = str((data or {}).get('typed', ''))
+    value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
+    S['typed'] = value
+    push_state()
 
 @socketio.on('play_audio')
 def ws_play_audio():
@@ -402,6 +373,31 @@ def audio_test():
     if(k === 'BACKSPACE') window.__localTypedShadow = window.__localTypedShadow.slice(0,-1);
     else if(k !== 'ENTER' && k && k.length === 1) window.__localTypedShadow += k.toLowerCase();
     if(k === 'ENTER') window.__typingOwner = false;
+  };
+})();
+</script>
+
+
+<script>
+(function(){
+  let timer=null;
+  window.__fullTextSync=function(value){
+    clearTimeout(timer);
+    timer=setTimeout(function(){
+      try{
+        const sock=(typeof rt!=='undefined'&&rt&&rt.connected)?rt:
+                   ((typeof rtGuest!=='undefined'&&rtGuest&&rtGuest.connected)?rtGuest:null);
+        if(sock) sock.emit('typed_sync',{typed:value||''});
+      }catch(e){}
+    },18);
+  };
+  window.__fullTextFlush=function(value){
+    clearTimeout(timer);
+    try{
+      const sock=(typeof rt!=='undefined'&&rt&&rt.connected)?rt:
+                 ((typeof rtGuest!=='undefined'&&rtGuest&&rtGuest.connected)?rtGuest:null);
+      if(sock) sock.emit('typed_sync',{typed:value||''});
+    }catch(e){}
   };
 })();
 </script>
