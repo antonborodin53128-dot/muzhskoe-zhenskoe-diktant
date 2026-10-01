@@ -137,9 +137,16 @@ function optimistic(k){
 function send(k){
  optimistic(k);
  if(k==='ENTER'){
-   if(window.__fullTextFlush)window.__fullTextFlush(ST.typed||'');
-   if(rt&&rt.connected){setTimeout(()=>rt.emit('key',{key:k}),8);return}
-   setTimeout(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error),12);
+   const finalTyped=ST.typed||'';
+   if(rt&&rt.connected){
+     rt.emit('typed_sync',{typed:finalTyped},()=>{
+       rt.emit('key',{key:'ENTER'});
+     });
+     return;
+   }
+   fetch('/api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})})
+     .then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'ENTER'})}))
+     .catch(console.error);
    return;
  }
  if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
@@ -161,9 +168,16 @@ function send(k){
  paintTyped();
 
  if(k==='ENTER'){
-   if(window.__fullTextFlush)window.__fullTextFlush(ST.typed||'');
-   if(rtGuest&&rtGuest.connected){setTimeout(()=>rtGuest.emit('key',{key:k}),8);return}
-   setTimeout(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error),12);
+   const finalTyped=ST.typed||'';
+   if(rtGuest&&rtGuest.connected){
+     rtGuest.emit('typed_sync',{typed:finalTyped},()=>{
+       rtGuest.emit('key',{key:'ENTER'});
+     });
+     return;
+   }
+   fetch('/api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})})
+     .then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'ENTER'})}))
+     .catch(console.error);
    return;
  }
  if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
@@ -297,6 +311,7 @@ def socket_typed_sync(data):
     value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
     S['typed'] = value
     push_state()
+    return {'ok': True, 'typed': value}
 
 @socketio.on('play_audio')
 def ws_play_audio():
