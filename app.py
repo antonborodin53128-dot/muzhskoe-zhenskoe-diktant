@@ -4,7 +4,7 @@ app=Flask(__name__)
 SETS={
 '1':['интеллигентность','ассимиляция','параллелепипед','аббревиатура','апеллировать','привередливый','комбинезон','периферия','бюллетень','целлофан'],
 '2':['иррациональность','идентифицировать','коррозия','прецедент','палисадник','поскользнуться','привилегия','пессимистичный','прерогатива','брошюра']}
-AUDIO_FILES={'интеллигентность': '01_интеллигентность.mp3', 'ассимиляция': '02_ассимиляция.mp3', 'параллелепипед': '03_параллелепипед.mp3', 'аббревиатура': '04_аббревиатура.mp3', 'апеллировать': '05_апеллировать.mp3', 'привередливый': '06_привередливый.mp3', 'комбинезон': '07_комбинезон.mp3', 'периферия': '08_периферия.mp3', 'бюллетень': '09_бюллетень.mp3', 'целлофан': '10_целлофан.mp3', 'иррациональность': '11_иррациональность.mp3', 'идентифицировать': '12_идентифицировать.mp3', 'коррозия': '13_коррозия.mp3', 'прецедент': '14_прецедент.mp3', 'палисадник': '15_палисадник.mp3', 'поскользнуться': '16_поскользнуться.mp3', 'привилегия': '17_привилегия.mp3', 'пессимистичный': '18_пессимистичный.mp3', 'прерогатива': '19_прерогатива.mp3', 'брошюра': '20_брошюра.mp3'}
+AUDIO_FILES={'интеллигентность': '01.mp3', 'ассимиляция': '02.mp3', 'параллелепипед': '03.mp3', 'аббревиатура': '04.mp3', 'апеллировать': '05.mp3', 'привередливый': '06.mp3', 'комбинезон': '07.mp3', 'периферия': '08.mp3', 'бюллетень': '09.mp3', 'целлофан': '10.mp3', 'иррациональность': '11.mp3', 'идентифицировать': '12.mp3', 'коррозия': '13.mp3', 'прецедент': '14.mp3', 'палисадник': '15.mp3', 'поскользнуться': '16.mp3', 'привилегия': '17.mp3', 'пессимистичный': '18.mp3', 'прерогатива': '19.mp3', 'брошюра': '20.mp3'}
 
 S={'phase':'setup','names':[],'words':[],'wi':0,'pi':0,'typed':'','answers':{},'scores':{},'show_table':False,'audio_seq':0}
 
@@ -104,14 +104,7 @@ async function unlockAudio(){
  audioUnlocked=true;
  document.getElementById('audioUnlock').style.display='none';
  // Create and prime every contest audio element from this real user gesture.
- const urls=[
-  '/audio/01_интеллигентность.mp3','/audio/02_ассимиляция.mp3','/audio/03_параллелепипед.mp3',
-  '/audio/04_аббревиатура.mp3','/audio/05_апеллировать.mp3','/audio/06_привередливый.mp3',
-  '/audio/07_комбинезон.mp3','/audio/08_периферия.mp3','/audio/09_бюллетень.mp3','/audio/10_целлофан.mp3',
-  '/audio/11_иррациональность.mp3','/audio/12_идентифицировать.mp3','/audio/13_коррозия.mp3',
-  '/audio/14_прецедент.mp3','/audio/15_палисадник.mp3','/audio/16_поскользнуться.mp3',
-  '/audio/17_привилегия.mp3','/audio/18_пессимистичный.mp3','/audio/19_прерогатива.mp3','/audio/20_брошюра.mp3'
- ];
+ const urls=['/audio/01.mp3','/audio/02.mp3','/audio/03.mp3','/audio/04.mp3','/audio/05.mp3','/audio/06.mp3','/audio/07.mp3','/audio/08.mp3','/audio/09.mp3','/audio/10.mp3','/audio/11.mp3','/audio/12.mp3','/audio/13.mp3','/audio/14.mp3','/audio/15.mp3','/audio/16.mp3','/audio/17.mp3','/audio/18.mp3','/audio/19.mp3','/audio/20.mp3'];
  for(const url of urls){
   const a=new Audio(url);
   a.preload='auto';
@@ -164,7 +157,7 @@ def home():return render_template_string(CONTROL)
 @app.get('/screen')
 def screen():return render_template_string(SCREEN)
 @app.get('/audio/<path:filename>')
-def audio_file(filename):return send_from_directory('audio',filename)
+def audio_file(filename):return send_from_directory('audio',filename,mimetype='audio/mpeg',conditional=True,max_age=3600)
 
 @app.get('/api/state')
 def state():return jsonify(snap(request.args.get('host')=='1'))
@@ -192,7 +185,7 @@ def audio_test():
  return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
  <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
- <audio controls preload="auto" src="/audio/01_интеллигентность.mp3"></audio></body>'''
+ <audio controls preload="auto" src="/audio/01.mp3"></audio></body>'''
 
 @app.post('/api/play-audio')
 def play_audio():
