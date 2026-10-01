@@ -140,6 +140,11 @@ function send(k){
    const finalTyped=ST.typed||'';
    if(rt&&rt.connected){
      rt.emit('typed_sync',{typed:finalTyped},()=>{
+       window.__typingOwner=false;
+       window.__localTypedShadow='';
+       window.__typingWord=null;
+       window.__typingParticipant=null;
+       ST.typed='';
        rt.emit('key',{key:'ENTER'});
      });
      return;
@@ -171,6 +176,12 @@ function send(k){
    const finalTyped=ST.typed||'';
    if(rtGuest&&rtGuest.connected){
      rtGuest.emit('typed_sync',{typed:finalTyped},()=>{
+       window.__typingOwner=false;
+       window.__localTypedShadow='';
+       window.__typingWord=null;
+       window.__typingParticipant=null;
+       ST.typed='';
+       paintTyped();
        rtGuest.emit('key',{key:'ENTER'});
      });
      return;
