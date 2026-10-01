@@ -115,18 +115,26 @@ async function table(show){await fetch('/api/table',{method:'POST',headers:{'Con
 async function finishGame(){if(!confirm('Завершить конкурс и показать итоговые результаты?'))return;await fetch('/api/finish',{method:'POST'});poll()}
 function playWord(){if(rt&&rt.connected){rt.emit('play_audio');return}fetch('/api/play-audio',{method:'POST'}).catch(console.error)}
 const rt=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
-if(rt)rt.on('state_host',st=>{ST=st;renderHost()});
+if(rt)rt.on('state_host',st=>{
+  const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
+  ST=st;
+  if(sameTyping){
+    const n=ctl.querySelector('.typed');
+    if(n)n.textContent=ST.typed||'_';
+  }else renderHost();
+});
 function optimistic(k){
  if(ST.phase!=='typing')return;
  if(k==='BACKSPACE')ST.typed=(ST.typed||'').slice(0,-1);
  else if(k!=='ENTER'&&k.length===1)ST.typed=(ST.typed||'')+k.toLowerCase();
- renderHost();
+ const n=ctl.querySelector('.typed');
+ if(n)n.textContent=ST.typed||'_';
 }
 function send(k){optimistic(k);if(rt&&rt.connected){rt.emit('key',{key:k});return}fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error)}
-document.addEventListener('legacy-keydown-disabled',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
+document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function renderHost(){if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}
 async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();renderHost()}
-let hostPollTimer=null;async function pollLoop(){try{await poll()}catch(e){console.error(e)}hostPollTimer=setTimeout(pollLoop,100)}pollLoop();
+let hostPollTimer=null;async function pollLoop(){if(!rt||!rt.connected){try{await poll()}catch(e){console.error(e)}}hostPollTimer=setTimeout(pollLoop,(rt&&rt.connected)?2000:150)}pollLoop();
 </script>'''
 
 SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
@@ -141,7 +149,7 @@ function send(k){
  if(rtGuest&&rtGuest.connected){rtGuest.emit('key',{key:k});return}
  fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error);
 }
-document.addEventListener('legacy-keydown-disabled',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
+document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
 let lastAudioSeq=0,audioUnlocked=false;
 const audioPlayers={};
@@ -191,7 +199,14 @@ function maybePlayAudio(){
 }
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
 function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
-if(rtGuest)rtGuest.on('state_guest',st=>{ST=st;renderGuest()});
+if(rtGuest)rtGuest.on('state_guest',st=>{
+  const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
+  ST=st;
+  if(sameTyping){
+    maybePlayAudio();
+    paintTyped();
+  }else renderGuest();
+});
 async function poll(){ST=await(await fetch('/api/state?_='+Date.now())).json();renderGuest()}
 async function pollLoop(){if(!rtGuest||!rtGuest.connected){try{await poll()}catch(e){console.error(e)}}setTimeout(pollLoop,2000)}pollLoop();
 </script>'''
@@ -289,160 +304,7 @@ def audio_test():
  <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
  <audio controls preload="auto" src="/audio/01.mp3"></audio>
-<script>
-(function(){
-  let localTyped = '';
-  let localDirtyUntil = 0;
-  let sendTimer = null;
 
-  function typedNode(){
-    return document.getElementById('typed') ||
-           document.getElementById('typedText') ||
-           document.querySelector('[data-typed]') ||
-           document.querySelector('.typed');
-  }
-  function legacyPaintLocalDisabled(){
-    const n=typedNode();
-    if(n) n.textContent = localTyped || ' ';
-  }
-  function syncFullValue(){
-    if(window.rtSocket && window.rtSocket.connected){
-      window.rtSocket.emit('set_typed',{typed:localTyped});
-    } else {
-      // fallback only; visual typing never waits for this request
-      fetch('api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({typed:localTyped})}).catch(()=>{});
-    }
-  }
-  function queueSync(){
-    clearTimeout(sendTimer);
-    sendTimer=setTimeout(syncFullValue,25);
-  }
-
-  document.addEventListener('legacy-keydown-disabled', function(e){
-    if(e.repeat && e.key !== 'Backspace') return;
-    if(e.key === 'Enter') return; // existing submit mechanic handles Enter
-    if(e.key === 'Backspace'){
-      e.preventDefault();
-      localTyped=localTyped.slice(0,-1);
-      localDirtyUntil=performance.now()+500;
-      /* legacy paint disabled */
-      queueSync();
-      return;
-    }
-    if(/^[а-яА-ЯёЁ-]$/.test(e.key)){
-      e.preventDefault();
-      localTyped += e.key;
-      localDirtyUntil=performance.now()+500;
-      /* legacy paint disabled */
-      queueSync();
-    }
-  }, true);
-
-  // Expose hook so render/poll can update local cache only when we're not actively typing.
-  window.__zeroLatencyApply=function(st){
-    if(performance.now() < localDirtyUntil) return;
-    if(st && typeof st.typed === 'string'){
-      localTyped=st.typed;
-      /* legacy paint disabled */
-    }
-  };
-})();
-</script>
-
-
-<script>
-(function(){
-  let localTyped = '';
-  let syncTimer = null;
-
-  function node(){
-    return document.getElementById('typed') ||
-           document.getElementById('typedText') ||
-           document.querySelector('[data-typed]') ||
-           document.querySelector('.typed');
-  }
-  function paint(){
-    const el=node();
-    if(!el) return;
-    // Only textContent changes. No layout recreation, no animation, no server repaint.
-    el.textContent = localTyped || ' ';
-  }
-  function sync(){
-    if(window.rtSocket && window.rtSocket.connected){
-      window.rtSocket.emit('set_typed',{typed:localTyped});
-    } else {
-      fetch('api/set-typed',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({typed:localTyped})
-      }).catch(()=>{});
-    }
-  }
-  function scheduleSync(){
-    clearTimeout(syncTimer);
-    syncTimer=setTimeout(sync,35);
-  }
-
-  // The ONLY active keyboard handler.
-  document.addEventListener('keydown', function(e){
-    if(e.ctrlKey || e.altKey || e.metaKey) return;
-
-    if(e.key === 'Backspace'){
-      e.preventDefault();
-      localTyped = localTyped.slice(0,-1);
-      paint();
-      scheduleSync();
-      return;
-    }
-
-    if(e.key === 'Enter'){
-      e.preventDefault();
-      // First push the exact local value, then submit Enter after it.
-      if(window.rtSocket && window.rtSocket.connected){
-        window.rtSocket.emit('set_typed',{typed:localTyped});
-        setTimeout(function(){ window.rtSocket.emit('key',{key:'Enter'}); },10);
-      } else {
-        sync();
-        setTimeout(function(){
-          fetch('api/key',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({key:'Enter'})}).catch(()=>{});
-        },20);
-      }
-      localTyped='';
-      paint();
-      return;
-    }
-
-    if(/^[а-яА-ЯёЁ-]$/.test(e.key)){
-      e.preventDefault();
-      localTyped += e.key;
-      paint();
-      scheduleSync();
-    }
-  }, true);
-
-  // Server may seed/reset local value only when not actively editing.
-  window.__singleInputReset=function(value){
-    localTyped = value || '';
-    paint();
-  };
-
-  // Keep the visual node geometrically stable.
-  function stabilize(){
-    const el=node();
-    if(!el){ requestAnimationFrame(stabilize); return; }
-    el.style.display='block';
-    el.style.width='100%';
-    el.style.textAlign='center';
-    el.style.transform='none';
-    el.style.transition='none';
-    el.style.whiteSpace='nowrap';
-    paint();
-  }
-  stabilize();
-})();
-</script>
 
 </body>'''
 
