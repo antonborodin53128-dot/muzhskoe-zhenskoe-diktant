@@ -135,7 +135,12 @@ function send(k){
  if(k==='ENTER'){
    const finalTyped=ST.typed||'';
    if(rt&&rt.connected){
-     rt.emit('submit_word',{typed:finalTyped});
+     rt.emit('submit_word',{typed:finalTyped},(res)=>{
+       if(res&&res.ok&&res.host_state){
+         ST=res.host_state;
+         renderHost();
+       }
+     });
      return;
    }
    fetch('/api/submit-word',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})}).catch(console.error);
@@ -162,7 +167,12 @@ function send(k){
  if(k==='ENTER'){
    const finalTyped=ST.typed||'';
    if(rtGuest&&rtGuest.connected){
-     rtGuest.emit('submit_word',{typed:finalTyped});
+     rtGuest.emit('submit_word',{typed:finalTyped},(res)=>{
+       if(res&&res.ok&&res.guest_state){
+         ST=res.guest_state;
+         renderGuest();
+       }
+     });
      return;
    }
    fetch('/api/submit-word',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})}).catch(console.error);
@@ -309,9 +319,18 @@ def socket_submit_word(data):
         return {'ok': False}
     S['typed'] = value
     ok = apply_key('ENTER')
-    if ok:
-        push_state()
-    return {'ok': bool(ok), 'pi': S['pi'], 'phase': S['phase']}
+    if not ok:
+        return {'ok': False}
+    guest_state = snap(False)
+    host_state = snap(True)
+    push_state()
+    return {
+        'ok': True,
+        'pi': S['pi'],
+        'phase': S['phase'],
+        'guest_state': guest_state,
+        'host_state': host_state
+    }
 
 @socketio.on('play_audio')
 def ws_play_audio():
@@ -332,8 +351,10 @@ def submit_word_http():
     ok = apply_key('ENTER')
     if not ok:
         return jsonify(ok=False), 409
+    guest_state = snap(False)
+    host_state = snap(True)
     push_state()
-    return jsonify(ok=True, pi=S['pi'], phase=S['phase'])
+    return jsonify(ok=True, pi=S['pi'], phase=S['phase'], guest_state=guest_state, host_state=host_state)
 
 @app.post('/api/key')
 def key():
