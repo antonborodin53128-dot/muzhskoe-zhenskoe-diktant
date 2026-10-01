@@ -1,0 +1,1 @@
+Запуск: pip install -r requirements.txt\npython app.py\nВедущий: http://127.0.0.1:5000/\nГостевой экран: http://127.0.0.1:5000/screen\n
