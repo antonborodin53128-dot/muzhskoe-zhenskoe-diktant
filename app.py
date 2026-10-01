@@ -141,7 +141,7 @@ async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).j
 let hostPollTimer=null;async function pollLoop(){if(!rt||!rt.connected){try{await poll()}catch(e){console.error(e)}}hostPollTimer=setTimeout(pollLoop,(rt&&rt.connected)?2000:150)}pollLoop();
 </script>'''
 
-SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="activateSoundNow(event)" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
+SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio(event)" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};
 const rtGuest=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
 let LOCAL_TYPED='';
@@ -181,74 +181,51 @@ function send(k){
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
 let lastAudioSeq=0,audioUnlocked=false;
-
-try{
- if(sessionStorage.getItem('diktantAudioUnlocked')==='1'){
-   audioUnlocked=true;
-   window.__audioUnlockedOnce=true;
-   const el=document.getElementById('audioUnlock');
-   if(el)el.remove();
- }
-}catch(_){}
-
 const audioPlayers={};
-window.__audioUnlockedOnce=false;
-const audioUnlockGuard=new MutationObserver(()=>{
- if(window.__audioUnlockedOnce){
-   const el=document.getElementById('audioUnlock');
-   if(el)el.remove();
- }
-});
-audioUnlockGuard.observe(document.documentElement,{childList:true,subtree:true});
-
 
 function audioKey(url){
  try{return decodeURIComponent(url).split('/').pop()}catch(e){return url.split('/').pop()}
 }
 
-
-function activateSoundNow(e){
- if(e){e.preventDefault();e.stopPropagation();}
- audioUnlocked=true;
- window.__audioUnlockedOnce=true;
- try{sessionStorage.setItem('diktantAudioUnlocked','1')}catch(_){}
-
- const el=document.getElementById('audioUnlock');
- if(el){
-   el.style.setProperty('display','none','important');
-   el.style.setProperty('visibility','hidden','important');
-   el.style.setProperty('pointer-events','none','important');
-   el.remove();
- }
-
- // Prime audio only after UI is already unlocked/removed.
- // Any playback error must never bring the overlay back.
- try{
-   const r=unlockAudio();
-   if(r && typeof r.catch==='function') r.catch(err=>console.error('audio prime:',err));
- }catch(err){console.error('audio prime:',err);}
- return false;
-}
-
-async function unlockAudio(){
- audioUnlocked=true;
- window.__audioUnlockedOnce=true;
-
- // Create and prime every contest audio element from this real user gesture.
+function prepareAudioPlayers(){
+ if(Object.keys(audioPlayers).length)return;
  const urls=['/audio/01.mp3','/audio/02.mp3','/audio/03.mp3','/audio/04.mp3','/audio/05.mp3','/audio/06.mp3','/audio/07.mp3','/audio/08.mp3','/audio/09.mp3','/audio/10.mp3','/audio/11.mp3','/audio/12.mp3','/audio/13.mp3','/audio/14.mp3','/audio/15.mp3','/audio/16.mp3','/audio/17.mp3','/audio/18.mp3','/audio/19.mp3','/audio/20.mp3'];
  for(const url of urls){
-  const a=new Audio(url);
-  a.preload='auto';
-  audioPlayers[audioKey(url)]=a;
-  a.load();
+   const a=new Audio(url);
+   a.preload='auto';
+   audioPlayers[audioKey(url)]=a;
+   try{a.load()}catch(_){}
  }
- // Prime the first real MP3 under the user's click, then immediately stop it.
- try{
-  const a=audioPlayers['01.mp3'];
-  a.volume=0.001;
-  await a.play();
-  a.pause();a.currentTime=0;a.volume=1;
- }catch(e){console.error('activation prime:',e)}
+}
+prepareAudioPlayers();
+
+function unlockAudio(e){
+ if(e){e.preventDefault();e.stopPropagation();}
+ audioUnlocked=true;
+
+ // UI removal is synchronous and unconditional.
+ const overlay=document.getElementById('audioUnlock');
+ if(overlay){
+   overlay.style.display='none';
+   overlay.remove();
+ }
+
+ // This is intentionally best-effort. Playback failure cannot restore the overlay.
+ const first=audioPlayers['01.mp3'];
+ if(first){
+   try{
+     first.volume=0.001;
+     const p=first.play();
+     if(p&&p.then){
+       p.then(()=>{
+         try{first.pause();first.currentTime=0;first.volume=1}catch(_){}
+       }).catch(err=>console.error('audio activation:',err));
+     }else{
+       try{first.pause();first.currentTime=0;first.volume=1}catch(_){}
+     }
+   }catch(err){console.error('audio activation:',err)}
+ }
+ return false;
 }
 
 function playRemoteWord(url){
