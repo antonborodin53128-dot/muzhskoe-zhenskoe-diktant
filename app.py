@@ -74,14 +74,12 @@ CONTROL='''<!doctype html><meta charset=utf-8><meta name="viewport" content="wid
 <div class=row><button id=set1 class="go setbtn" onclick="chooseSet(1)">НАБОР СЛОВ 1</button><button id=set2 class=setbtn onclick="chooseSet(2)">НАБОР СЛОВ 2</button></div>
 <div class=lab style="margin-top:28px;margin-bottom:10px">КОЛИЧЕСТВО УЧАСТНИКОВ</div>
 <div class=row style="align-items:center"><button onclick="changeCount(-1)" style="font-size:26px;width:58px">−</button><div id=countView style="font-size:32px;font-weight:900;min-width:55px;text-align:center;color:#ff5cba">4</div><button onclick="changeCount(1)" style="font-size:26px;width:58px">+</button></div>
-<div class=lab style="margin-top:28px;margin-bottom:10px">УЧАСТНИКИ</div><div class=row id=names></div>
 <div class=row style="margin-top:20px"><button class=go onclick=start()>НАЧАТЬ</button><a href=/screen target=_blank>ГОСТЕВОЙ ЭКРАН</a></div></div><div class=p id=ctl>ОЖИДАНИЕ</div><div class=p><button onclick=resetGame()>СБРОСИТЬ ИГРУ</button></div></div>
 <script>
 let ST={phase:'setup'};const $=x=>document.getElementById(x);let selectedSet='1',participantCount=4;
 function chooseSet(n){selectedSet=String(n);$('set1').classList.toggle('go',n===1);$('set2').classList.toggle('go',n===2)}
-function changeCount(d){participantCount=Math.max(1,Math.min(8,participantCount+d));$('countView').textContent=participantCount;mk()}
-function mk(){let h='';for(let i=1;i<=participantCount;i++)h+=`<input id=n${i} value="УЧАСТНИК ${i}">`;names.innerHTML=h}mk();
-async function start(){let a=[];for(let i=1;i<=participantCount;i++)a.push($('n'+i).value);await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set:selectedSet,names:a})});poll()}
+function changeCount(d){participantCount=Math.max(1,Math.min(8,participantCount+d));$('countView').textContent=participantCount}
+async function start(){let a=[];for(let i=1;i<=participantCount;i++)a.push(`УЧАСТНИК ${i}`);await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({set:selectedSet,names:a})});poll()}
 async function resetGame(){await fetch('/api/reset',{method:'POST'});location.reload()} async function next(){await fetch('/api/next',{method:'POST'});poll()}
 async function table(show){await fetch('/api/table',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({show:show})});poll()}
 async function finishGame(){if(!confirm('Завершить конкурс и показать итоговые результаты?'))return;await fetch('/api/finish',{method:'POST'});poll()}
@@ -91,42 +89,38 @@ document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==
 async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}setInterval(poll,300);poll();
 </script>'''
 
-SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 ВКЛЮЧИТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
+SCREEN='''<!doctype html><meta charset=utf-8><meta name="viewport" content="width=device-width,initial-scale=1">'''+STYLE+'''<div id="audioUnlock" style="position:fixed;inset:0;z-index:9999;background:#08060a;display:flex;align-items:center;justify-content:center;padding:24px"><button onclick="unlockAudio()" style="font-size:34px;font-weight:900;padding:28px 42px;border-radius:20px;background:#ff2d9a;color:white;border:0">🔊 АКТИВИРОВАТЬ ЗВУК</button></div><div class=w><div class=logo>ДИКТАНТ</div><div class=p id=v style="min-height:650px"></div></div><script>
 let ST={phase:'setup'};async function send(k){await fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})})}
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
-let lastAudioSeq=0,audioUnlocked=false,audioCtx=null,currentSource=null,audioCache={};
+let lastAudioSeq=0,audioUnlocked=false;
+const wordPlayer=new Audio();
+wordPlayer.preload='auto';
+
 async function unlockAudio(){
+ audioUnlocked=true;
+ document.getElementById('audioUnlock').style.display='none';
  try{
-  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
-  await audioCtx.resume();
-  // Keep the audio context alive with an inaudible oscillator.
-  const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();
-  gain.gain.value=0.000001;osc.connect(gain);gain.connect(audioCtx.destination);osc.start();
-  audioUnlocked=true;
-  document.getElementById('audioUnlock').style.display='none';
- }catch(e){console.error(e)}
+  wordPlayer.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+  wordPlayer.volume=1;
+  await wordPlayer.play();
+  wordPlayer.pause();
+  wordPlayer.currentTime=0;
+ }catch(e){console.log('audio activation:',e)}
 }
-async function playRemoteWord(url){
- if(!audioUnlocked||!audioCtx)return;
+
+function playRemoteWord(url){
+ if(!audioUnlocked||!url)return;
  try{
-  if(audioCtx.state==='suspended')await audioCtx.resume();
-  if(!audioCache[url]){
-   const r=await fetch(url,{cache:'force-cache'});
-   if(!r.ok)throw new Error('audio '+r.status);
-   audioCache[url]=await audioCtx.decodeAudioData(await r.arrayBuffer());
-  }
-  if(currentSource){try{currentSource.stop()}catch(e){}}
-  currentSource=audioCtx.createBufferSource();
-  currentSource.buffer=audioCache[url];
-  currentSource.connect(audioCtx.destination);
-  currentSource.start(0);
- }catch(e){
-  console.error('audio playback',e);
-  audioUnlocked=false;
-  document.getElementById('audioUnlock').style.display='flex';
- }
+  wordPlayer.pause();
+  wordPlayer.src=url;
+  wordPlayer.currentTime=0;
+  wordPlayer.load();
+  const p=wordPlayer.play();
+  if(p&&p.catch)p.catch(e=>console.error('word audio:',e));
+ }catch(e){console.error('word audio:',e)}
 }
+
 function maybePlayAudio(){
  if(ST.audio_seq&&ST.audio_seq!==lastAudioSeq){
   lastAudioSeq=ST.audio_seq;
