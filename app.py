@@ -182,6 +182,15 @@ document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
 let lastAudioSeq=0,audioUnlocked=false;
 const audioPlayers={};
+window.__audioUnlockedOnce=false;
+const audioUnlockGuard=new MutationObserver(()=>{
+ if(window.__audioUnlockedOnce){
+   const el=document.getElementById('audioUnlock');
+   if(el)el.remove();
+ }
+});
+audioUnlockGuard.observe(document.documentElement,{childList:true,subtree:true});
+
 
 function audioKey(url){
  try{return decodeURIComponent(url).split('/').pop()}catch(e){return url.split('/').pop()}
@@ -189,7 +198,10 @@ function audioKey(url){
 
 async function unlockAudio(){
  audioUnlocked=true;
- document.getElementById('audioUnlock').style.display='none';
+ window.__audioUnlockedOnce=true;
+ const unlock=document.getElementById('audioUnlock');
+ if(unlock){unlock.style.display='none';unlock.remove();}
+
  // Create and prime every contest audio element from this real user gesture.
  const urls=['/audio/01.mp3','/audio/02.mp3','/audio/03.mp3','/audio/04.mp3','/audio/05.mp3','/audio/06.mp3','/audio/07.mp3','/audio/08.mp3','/audio/09.mp3','/audio/10.mp3','/audio/11.mp3','/audio/12.mp3','/audio/13.mp3','/audio/14.mp3','/audio/15.mp3','/audio/16.mp3','/audio/17.mp3','/audio/18.mp3','/audio/19.mp3','/audio/20.mp3'];
  for(const url of urls){
