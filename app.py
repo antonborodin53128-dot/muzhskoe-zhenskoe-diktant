@@ -231,7 +231,22 @@ def audio_test():
  return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
  <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
- <audio controls preload="auto" src="/audio/01.mp3"></audio></body>'''
+ <audio controls preload="auto" src="/audio/01.mp3"></audio>
+<script>
+(function(){
+  if(typeof io === 'undefined') return;
+  const s = io({transports:['websocket','polling'], upgrade:true, reconnection:true});
+  window.rtSocket = s;
+  s.on('state', function(st){
+    window.__rtState = st;
+    if(typeof render === 'function') render(st);
+    else if(typeof applyState === 'function') applyState(st);
+    else if(typeof updateUI === 'function') updateUI(st);
+  });
+})();
+</script>
+
+</body>'''
 
 @app.post('/api/play-audio')
 def play_audio():
