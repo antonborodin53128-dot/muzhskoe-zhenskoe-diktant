@@ -237,6 +237,15 @@ def ws_key(data):
  k=str((data or {}).get('key',''))
  if apply_key(k): push_state()
 
+@socketio.on('set_typed')
+def socket_set_typed(data):
+    global state
+    value = str((data or {}).get('typed', ''))
+    # Only accept characters used by the contest input.
+    value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
+    state['typed'] = value
+    broadcast_state()
+
 @socketio.on('play_audio')
 def ws_play_audio():
  if S['phase'] in ('typing','reveal'):
@@ -269,7 +278,69 @@ def audio_test():
  return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
  <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
- <audio controls preload="auto" src="/audio/01.mp3"></audio></body>'''
+ <audio controls preload="auto" src="/audio/01.mp3"></audio>
+<script>
+(function(){
+  let localTyped = '';
+  let localDirtyUntil = 0;
+  let sendTimer = null;
+
+  function typedNode(){
+    return document.getElementById('typed') ||
+           document.getElementById('typedText') ||
+           document.querySelector('[data-typed]') ||
+           document.querySelector('.typed');
+  }
+  function paintLocal(){
+    const n=typedNode();
+    if(n) n.textContent = localTyped || ' ';
+  }
+  function syncFullValue(){
+    if(window.rtSocket && window.rtSocket.connected){
+      window.rtSocket.emit('set_typed',{typed:localTyped});
+    } else {
+      // fallback only; visual typing never waits for this request
+      fetch('api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({typed:localTyped})}).catch(()=>{});
+    }
+  }
+  function queueSync(){
+    clearTimeout(sendTimer);
+    sendTimer=setTimeout(syncFullValue,25);
+  }
+
+  document.addEventListener('keydown', function(e){
+    if(e.repeat && e.key !== 'Backspace') return;
+    if(e.key === 'Enter') return; // existing submit mechanic handles Enter
+    if(e.key === 'Backspace'){
+      e.preventDefault();
+      localTyped=localTyped.slice(0,-1);
+      localDirtyUntil=performance.now()+500;
+      paintLocal();
+      queueSync();
+      return;
+    }
+    if(/^[а-яА-ЯёЁ-]$/.test(e.key)){
+      e.preventDefault();
+      localTyped += e.key;
+      localDirtyUntil=performance.now()+500;
+      paintLocal();
+      queueSync();
+    }
+  }, true);
+
+  // Expose hook so render/poll can update local cache only when we're not actively typing.
+  window.__zeroLatencyApply=function(st){
+    if(performance.now() < localDirtyUntil) return;
+    if(st && typeof st.typed === 'string'){
+      localTyped=st.typed;
+      paintLocal();
+    }
+  };
+})();
+</script>
+
+</body>'''
 
 @app.post('/api/play-audio')
 def play_audio():
