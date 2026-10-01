@@ -116,6 +116,7 @@ async function finishGame(){if(!confirm('Завершить конкурс и п
 function playWord(){if(rt&&rt.connected){rt.emit('play_audio');return}fetch('/api/play-audio',{method:'POST'}).catch(console.error)}
 const rt=typeof io!=='undefined'?io({transports:['websocket','polling']}):null;
 if(rt)rt.on('state_host',st=>{
+  if(window.__mergeWithoutRollback) st=window.__mergeWithoutRollback(ST,st);
   const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
   ST=st;
   if(sameTyping){
@@ -125,8 +126,11 @@ if(rt)rt.on('state_host',st=>{
 });
 function optimistic(k){
  if(ST.phase!=='typing')return;
+ if(!window.__typingOwner && window.__markLocalTyping) window.__markLocalTyping(ST);
+ if(window.__shadowKey) window.__shadowKey(k);
  if(k==='BACKSPACE')ST.typed=(ST.typed||'').slice(0,-1);
  else if(k!=='ENTER'&&k.length===1)ST.typed=(ST.typed||'')+k.toLowerCase();
+ if(window.__typingOwner) window.__localTypedShadow=ST.typed||'';
  const n=ctl.querySelector('.typed');
  if(n)n.textContent=ST.typed||'_';
 }
@@ -200,6 +204,7 @@ function maybePlayAudio(){
 function leaderboard(title){let h=`<div class="big pink">${title}</div><div class=lab style="text-align:center;margin:20px">МЕНЬШЕ ОШИБОК — ВЫШЕ МЕСТО</div>`;let rows=Object.entries(ST.scores).sort((a,b)=>a[1]-b[1]);for(let i=0;i<rows.length;i++){let [n,x]=rows[i];h+=`<div class=ans style="text-align:center">${i+1}. ${n} — <span class=pink>${x}</span> очк.</div>`}return h}
 function renderGuest(){maybePlayAudio();let h='';if(ST.phase==='setup')h='<div class=big>ОЖИДАНИЕ</div>';else if(ST.phase==='finished')h=leaderboard('ИТОГИ');else if(ST.show_table)h=leaderboard('ТАБЛИЦА ЛИДЕРОВ');else if(ST.phase==='typing')h=`<div class=lab style="text-align:center">СЛОВО ${ST.wi+1} ИЗ 10</div><div class="big pink" style="margin:25px">${ST.name}</div><div class=lab style="text-align:center">ВВОДИТЕ СЛОВО</div><div class=typed id=guestTyped>${ST.typed||'_'}</div><div style="text-align:center;color:#a58d9b">BACKSPACE — ИСПРАВИТЬ &nbsp; ENTER — ПОДТВЕРДИТЬ</div>`;else if(ST.phase==='reveal'){h=`<div class=lab style="text-align:center">ПРАВИЛЬНЫЙ ОТВЕТ</div><div class="big pink">${ST.word}</div>`;for(const n of ST.names){let a=ST.answers[n];h+=`<div class=ans>${n}: ${oh(a.ops)} <span class=pink>— ${a.errors} очк.</span></div>`}}v.innerHTML=h}
 if(rtGuest)rtGuest.on('state_guest',st=>{
+  if(window.__mergeWithoutRollback) st=window.__mergeWithoutRollback(ST,st);
   const sameTyping=(ST.phase==='typing'&&st.phase==='typing'&&ST.wi===st.wi&&ST.pi===st.pi);
   ST=st;
   if(sameTyping){
@@ -305,6 +310,50 @@ def audio_test():
  <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
  <audio controls preload="auto" src="/audio/01.mp3"></audio>
 
+
+
+<script>
+(function(){
+  window.__typingOwner = false;
+  window.__typingWord = null;
+  window.__typingParticipant = null;
+  window.__localTypedShadow = '';
+
+  window.__markLocalTyping = function(st){
+    window.__typingOwner = true;
+    window.__typingWord = st && st.wi;
+    window.__typingParticipant = st && st.pi;
+    window.__localTypedShadow = (st && st.typed) || '';
+  };
+
+  window.__mergeWithoutRollback = function(current, incoming){
+    if(!incoming) return incoming;
+    if(!window.__typingOwner) return incoming;
+
+    const sameTurn =
+      incoming.phase === 'typing' &&
+      incoming.wi === window.__typingWord &&
+      incoming.pi === window.__typingParticipant;
+
+    if(!sameTurn){
+      window.__typingOwner = false;
+      window.__localTypedShadow = '';
+      return incoming;
+    }
+
+    // Critical rule: server may update everything except the locally-owned typed string.
+    incoming.typed = window.__localTypedShadow;
+    return incoming;
+  };
+
+  window.__shadowKey = function(k){
+    if(!window.__typingOwner) return;
+    if(k === 'BACKSPACE') window.__localTypedShadow = window.__localTypedShadow.slice(0,-1);
+    else if(k !== 'ENTER' && k && k.length === 1) window.__localTypedShadow += k.toLowerCase();
+    if(k === 'ENTER') window.__typingOwner = false;
+  };
+})();
+</script>
 
 </body>'''
 
