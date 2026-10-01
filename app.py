@@ -138,20 +138,13 @@ function send(k){
  optimistic(k);
  if(k==='ENTER'){
    const finalTyped=ST.typed||'';
+   window.__typingOwner=false;
+   window.__localTypedShadow='';
    if(rt&&rt.connected){
-     rt.emit('typed_sync',{typed:finalTyped},()=>{
-       window.__typingOwner=false;
-       window.__localTypedShadow='';
-       window.__typingWord=null;
-       window.__typingParticipant=null;
-       ST.typed='';
-       rt.emit('key',{key:'ENTER'});
-     });
+     rt.emit('submit_word',{typed:finalTyped});
      return;
    }
-   fetch('/api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})})
-     .then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'ENTER'})}))
-     .catch(console.error);
+   fetch('/api/submit-word',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})}).catch(console.error);
    return;
  }
  if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
@@ -174,21 +167,13 @@ function send(k){
 
  if(k==='ENTER'){
    const finalTyped=ST.typed||'';
+   window.__typingOwner=false;
+   window.__localTypedShadow='';
    if(rtGuest&&rtGuest.connected){
-     rtGuest.emit('typed_sync',{typed:finalTyped},()=>{
-       window.__typingOwner=false;
-       window.__localTypedShadow='';
-       window.__typingWord=null;
-       window.__typingParticipant=null;
-       ST.typed='';
-       paintTyped();
-       rtGuest.emit('key',{key:'ENTER'});
-     });
+     rtGuest.emit('submit_word',{typed:finalTyped});
      return;
    }
-   fetch('/api/set-typed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})})
-     .then(()=>fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:'ENTER'})}))
-     .catch(console.error);
+   fetch('/api/submit-word',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({typed:finalTyped})}).catch(console.error);
    return;
  }
  if(window.__fullTextSync)window.__fullTextSync(ST.typed||'');
@@ -322,13 +307,42 @@ def socket_typed_sync(data):
     value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
     S['typed'] = value
     push_state()
-    return {'ok': True, 'typed': value}
+
+@socketio.on('submit_word')
+def socket_submit_word(data):
+    if S['phase'] != 'typing':
+        return {'ok': False}
+    value = str((data or {}).get('typed', ''))
+    value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
+    if not value:
+        return {'ok': False}
+    S['typed'] = value
+    ok = apply_key('ENTER')
+    if ok:
+        push_state()
+    return {'ok': bool(ok), 'pi': S['pi'], 'phase': S['phase']}
 
 @socketio.on('play_audio')
 def ws_play_audio():
  if S['phase'] in ('typing','reveal'):
   S['audio_seq']=S.get('audio_seq',0)+1
   push_state()
+
+@app.post('/api/submit-word')
+def submit_word_http():
+    if S['phase'] != 'typing':
+        return jsonify(ok=False), 409
+    data = request.get_json(silent=True) or {}
+    value = str(data.get('typed', ''))
+    value = ''.join(ch for ch in value if ch.isalpha() or ch in 'ёЁ-')[:64]
+    if not value:
+        return jsonify(ok=False), 409
+    S['typed'] = value
+    ok = apply_key('ENTER')
+    if not ok:
+        return jsonify(ok=False), 409
+    push_state()
+    return jsonify(ok=True, pi=S['pi'], phase=S['phase'])
 
 @app.post('/api/key')
 def key():
