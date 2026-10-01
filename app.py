@@ -1,9 +1,13 @@
+import os
 from flask import Flask, request, jsonify, render_template_string
 import random
 app=Flask(__name__)
 SETS={
 '1':['интеллигентность','ассимиляция','параллелепипед','аббревиатура','апеллировать','привередливый','комбинезон','периферия','бюллетень','целлофан'],
 '2':['иррациональность','идентифицировать','коррозия','прецедент','палисадник','поскользнуться','привилегия','пессимистичный','прерогатива','брошюра']}
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+AUDIO_DIR = os.path.join(BASE_DIR, 'audio')
+
 AUDIO_FILES={'интеллигентность': '01.mp3', 'ассимиляция': '02.mp3', 'параллелепипед': '03.mp3', 'аббревиатура': '04.mp3', 'апеллировать': '05.mp3', 'привередливый': '06.mp3', 'комбинезон': '07.mp3', 'периферия': '08.mp3', 'бюллетень': '09.mp3', 'целлофан': '10.mp3', 'иррациональность': '11.mp3', 'идентифицировать': '12.mp3', 'коррозия': '13.mp3', 'прецедент': '14.mp3', 'палисадник': '15.mp3', 'поскользнуться': '16.mp3', 'привилегия': '17.mp3', 'пессимистичный': '18.mp3', 'прерогатива': '19.mp3', 'брошюра': '20.mp3'}
 
 S={'phase':'setup','names':[],'words':[],'wi':0,'pi':0,'typed':'','answers':{},'scores':{},'show_table':False,'audio_seq':0}
@@ -157,7 +161,7 @@ def home():return render_template_string(CONTROL)
 @app.get('/screen')
 def screen():return render_template_string(SCREEN)
 @app.get('/audio/<path:filename>')
-def audio_file(filename):return send_from_directory('audio',filename,mimetype='audio/mpeg',conditional=True,max_age=3600)
+def audio_file(filename):return send_from_directory(AUDIO_DIR,filename,mimetype='audio/mpeg',conditional=True,max_age=3600)
 
 @app.get('/api/state')
 def state():return jsonify(snap(request.args.get('host')=='1'))
@@ -180,6 +184,17 @@ def key():
 def nxt():
  if S['phase']!='reveal':return jsonify(ok=False),409
  S['wi']+=1;S['phase']='finished' if S['wi']>=10 else 'typing';return jsonify(ok=True)
+@app.get('/audio-status')
+def audio_status():
+ files = sorted([f for f in os.listdir(AUDIO_DIR) if f.lower().endswith('.mp3')]) if os.path.isdir(AUDIO_DIR) else []
+ return {
+  'base_dir': BASE_DIR,
+  'audio_dir_exists': os.path.isdir(AUDIO_DIR),
+  'audio_count': len(files),
+  'first_files': files[:5],
+  '01_exists': os.path.isfile(os.path.join(AUDIO_DIR,'01.mp3'))
+ }
+
 @app.get('/audio-test')
 def audio_test():
  return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
