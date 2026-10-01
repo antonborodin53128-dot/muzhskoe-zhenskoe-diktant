@@ -94,31 +94,50 @@ let ST={phase:'setup'};async function send(k){await fetch('/api/key',{method:'PO
 document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
 let lastAudioSeq=0,audioUnlocked=false;
-const wordPlayer=new Audio();
-wordPlayer.preload='auto';
+const audioPlayers={};
+
+function audioKey(url){
+ try{return decodeURIComponent(url).split('/').pop()}catch(e){return url.split('/').pop()}
+}
 
 async function unlockAudio(){
  audioUnlocked=true;
  document.getElementById('audioUnlock').style.display='none';
+ // Create and prime every contest audio element from this real user gesture.
+ const urls=[
+  '/audio/01_интеллигентность.mp3','/audio/02_ассимиляция.mp3','/audio/03_параллелепипед.mp3',
+  '/audio/04_аббревиатура.mp3','/audio/05_апеллировать.mp3','/audio/06_привередливый.mp3',
+  '/audio/07_комбинезон.mp3','/audio/08_периферия.mp3','/audio/09_бюллетень.mp3','/audio/10_целлофан.mp3',
+  '/audio/11_иррациональность.mp3','/audio/12_идентифицировать.mp3','/audio/13_коррозия.mp3',
+  '/audio/14_прецедент.mp3','/audio/15_палисадник.mp3','/audio/16_поскользнуться.mp3',
+  '/audio/17_привилегия.mp3','/audio/18_пессимистичный.mp3','/audio/19_прерогатива.mp3','/audio/20_брошюра.mp3'
+ ];
+ for(const url of urls){
+  const a=new Audio(url);
+  a.preload='auto';
+  audioPlayers[audioKey(url)]=a;
+  a.load();
+ }
+ // Prime the first real MP3 under the user's click, then immediately stop it.
  try{
-  wordPlayer.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
-  wordPlayer.volume=1;
-  await wordPlayer.play();
-  wordPlayer.pause();
-  wordPlayer.currentTime=0;
- }catch(e){console.log('audio activation:',e)}
+  const a=audioPlayers['01_интеллигентность.mp3'];
+  a.volume=0.001;
+  await a.play();
+  a.pause();a.currentTime=0;a.volume=1;
+ }catch(e){console.error('activation prime:',e)}
 }
 
 function playRemoteWord(url){
  if(!audioUnlocked||!url)return;
+ const key=audioKey(url);
+ const a=audioPlayers[key];
+ if(!a){console.error('No audio player for',key);return}
+ for(const p of Object.values(audioPlayers)){if(p!==a){try{p.pause();p.currentTime=0}catch(e){}}}
  try{
-  wordPlayer.pause();
-  wordPlayer.src=url;
-  wordPlayer.currentTime=0;
-  wordPlayer.load();
-  const p=wordPlayer.play();
-  if(p&&p.catch)p.catch(e=>console.error('word audio:',e));
- }catch(e){console.error('word audio:',e)}
+  a.currentTime=0;a.volume=1;
+  const promise=a.play();
+  if(promise&&promise.catch)promise.catch(e=>console.error('word play:',key,e));
+ }catch(e){console.error('word play:',key,e)}
 }
 
 function maybePlayAudio(){
@@ -168,6 +187,13 @@ def key():
 def nxt():
  if S['phase']!='reveal':return jsonify(ok=False),409
  S['wi']+=1;S['phase']='finished' if S['wi']>=10 else 'typing';return jsonify(ok=True)
+@app.get('/audio-test')
+def audio_test():
+ return '''<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+ <body style="background:#09070b;color:white;font-family:Arial;text-align:center;padding:40px">
+ <h1>ТЕСТ ЗВУКА</h1><p>Если кнопка ниже воспроизводит слово, MP3 и сервер работают.</p>
+ <audio controls preload="auto" src="/audio/01_интеллигентность.mp3"></audio></body>'''
+
 @app.post('/api/play-audio')
 def play_audio():
  if S['phase'] not in ('typing','reveal'):return jsonify(ok=False),409
