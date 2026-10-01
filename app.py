@@ -123,7 +123,7 @@ function optimistic(k){
  renderHost();
 }
 function send(k){optimistic(k);if(rt&&rt.connected){rt.emit('key',{key:k});return}fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error)}
-document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
+document.addEventListener('legacy-keydown-disabled',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function renderHost(){if(ST.phase==='setup'){ctl.innerHTML='ОЖИДАНИЕ';return}let h=`<div class=lab>СЛОВО ${Math.min(ST.wi+1,10)} ИЗ 10</div>`;if(ST.phase==='typing')h+=`<div class=ans>Сейчас пишет: <span class=pink>${ST.name}</span></div><div class=ans>Правильное слово: <span class=pink>${ST.word}</span></div><button class=go onclick=playWord() style="width:100%;margin:10px 0 14px">🔊 ОЗВУЧИТЬ СЛОВО</button><div class=typed>${ST.typed||'_'}</div>`;if(ST.phase==='reveal')h+=`<div class=ans>Правильно: <span class=pink>${ST.word}</span></div><button class=go onclick=next()>СЛЕДУЮЩЕЕ СЛОВО</button>`;if(ST.phase==='finished')h='<div class="big pink">КОНКУРС ЗАВЕРШЁН</div>';if(ST.phase!=='finished'){h+=`<hr><div class=row><button class=go onclick="table(${!ST.show_table})">${ST.show_table?'ВЕРНУТЬСЯ К КОНКУРСУ':'ОТКРЫТЬ ТАБЛИЦУ'}</button><button onclick=finishGame()>ЗАВЕРШИТЬ КОНКУРС<br><span style="font-size:12px;font-weight:normal;color:#c9a9bb">с подсчётом результатов</span></button></div>`}if(ST.phase==='finished'){h+='<hr><div class=lab>ИТОГОВЫЕ ОЧКИ</div>';for(const n of ST.names)h+=`<div class=ans>${n}: <span class=pink>${ST.scores[n]||0}</span></div>`}ctl.innerHTML=h}
 async function poll(){ST=await(await fetch('/api/state?host=1&_='+Date.now())).json();renderHost()}
 let hostPollTimer=null;async function pollLoop(){try{await poll()}catch(e){console.error(e)}hostPollTimer=setTimeout(pollLoop,100)}pollLoop();
@@ -141,7 +141,7 @@ function send(k){
  if(rtGuest&&rtGuest.connected){rtGuest.emit('key',{key:k});return}
  fetch('/api/key',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k})}).catch(console.error);
 }
-document.addEventListener('keydown',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
+document.addEventListener('legacy-keydown-disabled',e=>{if(ST.phase!=='typing')return;if(e.key==='Backspace'){e.preventDefault();send('BACKSPACE')}else if(e.key==='Enter'){e.preventDefault();send('ENTER')}else if(e.key.length===1&&/^[а-яА-ЯёЁ-]$/.test(e.key)){e.preventDefault();send(e.key)}});
 function oh(o){return o.map(x=>x[0]==='ok'?x[2]:x[0]==='sub'?`<span class=bad>${x[2]}</span>`:x[0]==='extra'?`<span class=extra>${x[2]}</span>`:`<span class=miss>+${x[1]}</span>`).join('')}
 let lastAudioSeq=0,audioUnlocked=false;
 const audioPlayers={};
@@ -301,7 +301,7 @@ def audio_test():
            document.querySelector('[data-typed]') ||
            document.querySelector('.typed');
   }
-  function paintLocal(){
+  function legacyPaintLocalDisabled(){
     const n=typedNode();
     if(n) n.textContent = localTyped || ' ';
   }
@@ -319,14 +319,14 @@ def audio_test():
     sendTimer=setTimeout(syncFullValue,25);
   }
 
-  document.addEventListener('keydown', function(e){
+  document.addEventListener('legacy-keydown-disabled', function(e){
     if(e.repeat && e.key !== 'Backspace') return;
     if(e.key === 'Enter') return; // existing submit mechanic handles Enter
     if(e.key === 'Backspace'){
       e.preventDefault();
       localTyped=localTyped.slice(0,-1);
       localDirtyUntil=performance.now()+500;
-      paintLocal();
+      /* legacy paint disabled */
       queueSync();
       return;
     }
@@ -334,17 +334,17 @@ def audio_test():
       e.preventDefault();
       localTyped += e.key;
       localDirtyUntil=performance.now()+500;
-      paintLocal();
+      /* legacy paint disabled */
       queueSync();
     }
   }, true);
 
   // Expose hook so render/poll can update local cache only when we're not actively typing.
   window.__zeroLatencyApply=function(st){
-    if(performance.now() < localDirtyUntil || (window.__typingIsLocal && window.__typingIsLocal())) return;
+    if(performance.now() < localDirtyUntil) return;
     if(st && typeof st.typed === 'string'){
       localTyped=st.typed;
-      paintLocal();
+      /* legacy paint disabled */
     }
   };
 })();
@@ -353,16 +353,94 @@ def audio_test():
 
 <script>
 (function(){
-  let typingLockUntil = 0;
+  let localTyped = '';
+  let syncTimer = null;
+
+  function node(){
+    return document.getElementById('typed') ||
+           document.getElementById('typedText') ||
+           document.querySelector('[data-typed]') ||
+           document.querySelector('.typed');
+  }
+  function paint(){
+    const el=node();
+    if(!el) return;
+    // Only textContent changes. No layout recreation, no animation, no server repaint.
+    el.textContent = localTyped || ' ';
+  }
+  function sync(){
+    if(window.rtSocket && window.rtSocket.connected){
+      window.rtSocket.emit('set_typed',{typed:localTyped});
+    } else {
+      fetch('api/set-typed',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({typed:localTyped})
+      }).catch(()=>{});
+    }
+  }
+  function scheduleSync(){
+    clearTimeout(syncTimer);
+    syncTimer=setTimeout(sync,35);
+  }
+
+  // The ONLY active keyboard handler.
   document.addEventListener('keydown', function(e){
-    if(e.key === 'Backspace' || e.key === 'Enter' || /^[а-яА-ЯёЁ-]$/.test(e.key)){
-      typingLockUntil = performance.now() + 900;
+    if(e.ctrlKey || e.altKey || e.metaKey) return;
+
+    if(e.key === 'Backspace'){
+      e.preventDefault();
+      localTyped = localTyped.slice(0,-1);
+      paint();
+      scheduleSync();
+      return;
+    }
+
+    if(e.key === 'Enter'){
+      e.preventDefault();
+      // First push the exact local value, then submit Enter after it.
+      if(window.rtSocket && window.rtSocket.connected){
+        window.rtSocket.emit('set_typed',{typed:localTyped});
+        setTimeout(function(){ window.rtSocket.emit('key',{key:'Enter'}); },10);
+      } else {
+        sync();
+        setTimeout(function(){
+          fetch('api/key',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({key:'Enter'})}).catch(()=>{});
+        },20);
+      }
+      localTyped='';
+      paint();
+      return;
+    }
+
+    if(/^[а-яА-ЯёЁ-]$/.test(e.key)){
+      e.preventDefault();
+      localTyped += e.key;
+      paint();
+      scheduleSync();
     }
   }, true);
 
-  window.__typingIsLocal = function(){
-    return performance.now() < typingLockUntil;
+  // Server may seed/reset local value only when not actively editing.
+  window.__singleInputReset=function(value){
+    localTyped = value || '';
+    paint();
   };
+
+  // Keep the visual node geometrically stable.
+  function stabilize(){
+    const el=node();
+    if(!el){ requestAnimationFrame(stabilize); return; }
+    el.style.display='block';
+    el.style.width='100%';
+    el.style.textAlign='center';
+    el.style.transform='none';
+    el.style.transition='none';
+    el.style.whiteSpace='nowrap';
+    paint();
+  }
+  stabilize();
 })();
 </script>
 
